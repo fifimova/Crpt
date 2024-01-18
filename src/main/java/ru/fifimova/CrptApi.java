@@ -34,29 +34,22 @@ public class CrptApi {
 
     /**
      * Отправляет документ в API.
+     *
      * @param jsonDocument JSON-формат документа для отправки.
-     * @param signature Подпись для аутентификации запроса.
-     * @throws IOException если произошла ошибка при отправке запроса.
+     * @param signature    Подпись для аутентификации запроса.
+     * @throws IOException          если произошла ошибка при отправке запроса.
      * @throws InterruptedException если поток был прерван во время ожидания.
      */
     public void sendDocument(String jsonDocument, String signature) {
         try {
             Thread.sleep(sleepTimeMillis);
+
             HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://ismp.crpt.ru/api/v3/lk/documents/create"))
-                    .header("Content-Type", "application/json")
-                    .header("X-Signature", signature)
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonDocument))
-                    .build();
+            HttpRequest request = buildHttpRequest(jsonDocument, signature);
 
+            log.info("Sending document to API");
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-            if (response.statusCode() == 200) {
-                log.info("Response received successfully");
-            } else {
-                log.warning("Response with status code: " + response.statusCode());
-            }
+            handleResponse(response);
         } catch (IOException e) {
             log.severe("IOException occurred: " + e.getMessage());
         } catch (InterruptedException e) {
@@ -64,6 +57,24 @@ public class CrptApi {
             Thread.currentThread().interrupt();
         }
     }
+
+    private HttpRequest buildHttpRequest(String jsonDocument, String signature) {
+        return HttpRequest.newBuilder()
+                .uri(URI.create("https://ismp.crpt.ru/api/v3/lk/documents/create"))
+                .header("Content-Type", "application/json")
+                .header("X-Signature", signature)
+                .POST(HttpRequest.BodyPublishers.ofString(jsonDocument))
+                .build();
+    }
+
+    private void handleResponse(HttpResponse<String> response) {
+        if (response.statusCode() == 200) {
+            log.info("Response received successfully");
+        } else {
+            log.warning("Response with status code: " + response.statusCode());
+        }
+    }
+
 
     public String createJsonDocument(Document document) throws JsonProcessingException {
         ObjectMapper objectMapper = new ObjectMapper();
