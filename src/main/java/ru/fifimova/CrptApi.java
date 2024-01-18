@@ -14,9 +14,15 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 
+/**
+ * Клиент для работы с API Честного знака.
+ * Позволяет отправлять документы и создавать их в формате JSON.
+ */
 public class CrptApi {
 
+    private static final Logger log = Logger.getLogger(CrptApi.class.getName());
     private final long sleepTimeMillis;
 
     public CrptApi(TimeUnit timeUnit, int requestLimit) {
@@ -26,18 +32,37 @@ public class CrptApi {
         this.sleepTimeMillis = timeUnit.toMillis(1) / requestLimit;
     }
 
-    public void sendDocument(String jsonDocument, String signature) throws IOException, InterruptedException {
-        Thread.sleep(sleepTimeMillis);
+    /**
+     * Отправляет документ в API.
+     * @param jsonDocument JSON-формат документа для отправки.
+     * @param signature Подпись для аутентификации запроса.
+     * @throws IOException если произошла ошибка при отправке запроса.
+     * @throws InterruptedException если поток был прерван во время ожидания.
+     */
+    public void sendDocument(String jsonDocument, String signature) {
+        try {
+            Thread.sleep(sleepTimeMillis);
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://ismp.crpt.ru/api/v3/lk/documents/create"))
+                    .header("Content-Type", "application/json")
+                    .header("X-Signature", signature)
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonDocument))
+                    .build();
 
-        HttpClient client = HttpClient.newHttpClient();
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("https://ismp.crpt.ru/api/v3/lk/documents/create"))
-                .header("Content-Type", "application/json")
-                .header("X-Signature", signature)
-                .POST(HttpRequest.BodyPublishers.ofString(jsonDocument))
-                .build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                log.info("Response received successfully");
+            } else {
+                log.warning("Response with status code: " + response.statusCode());
+            }
+        } catch (IOException e) {
+            log.severe("IOException occurred: " + e.getMessage());
+        } catch (InterruptedException e) {
+            log.severe("Thread was interrupted: " + e.getMessage());
+            Thread.currentThread().interrupt();
+        }
     }
 
     public String createJsonDocument(Document document) throws JsonProcessingException {
@@ -91,3 +116,4 @@ public class CrptApi {
         private String uituCode;
     }
 }
+
