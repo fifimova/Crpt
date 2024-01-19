@@ -13,6 +13,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
@@ -23,38 +26,38 @@ import java.util.logging.Logger;
 public class CrptApi {
 
     private static final Logger log = Logger.getLogger(CrptApi.class.getName());
-    private final long sleepTimeMillis;
+    private final Semaphore semaphore;
+    private final ScheduledExecutorService scheduler;
 
     public CrptApi(TimeUnit timeUnit, int requestLimit) {
-        if (requestLimit <= 0) {
-            throw new IllegalArgumentException("The request limit cannot be negative");
-        }
-        this.sleepTimeMillis = timeUnit.toMillis(1) / requestLimit;
+        this.semaphore = new Semaphore(requestLimit);
+        this.scheduler = Executors.newScheduledThreadPool(1);
+
+        scheduler.scheduleAtFixedRate(() -> semaphore.release(requestLimit - semaphore.availablePermits()),
+                0, 1, timeUnit);
     }
 
-    /**
-     * Отправляет документ в API.
-     *
-     * @param jsonDocument JSON-формат документа для отправки.
-     * @param signature    Подпись для аутентификации запроса.
-     * @throws IOException          если произошла ошибка при отправке запроса.
-     * @throws InterruptedException если поток был прерван во время ожидания.
-     */
     public void sendDocument(String jsonDocument, String signature) {
         try {
-            Thread.sleep(sleepTimeMillis);
+            semaphore.acquire();
+            log.info("Acquired a permit, proceeding with the request");
 
-            HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = buildHttpRequest(jsonDocument, signature);
+            try {
+                HttpClient client = HttpClient.newHttpClient();
+                HttpRequest request = buildHttpRequest(jsonDocument, signature);
+                log.info("Sending document to API");
 
-            log.info("Sending document to API");
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            handleResponse(response);
+                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                handleResponse(response);
+            } finally {
+                semaphore.release();
+                log.info("Released a permit");
+            }
         } catch (IOException e) {
             log.severe("IOException occurred: " + e.getMessage());
         } catch (InterruptedException e) {
-            log.severe("Thread was interrupted: " + e.getMessage());
             Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting to send a document", e);
         }
     }
 
