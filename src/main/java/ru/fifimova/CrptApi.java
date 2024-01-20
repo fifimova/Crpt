@@ -29,35 +29,63 @@ public class CrptApi {
     private final Semaphore semaphore;
     private final ScheduledExecutorService scheduler;
 
-    public CrptApi(TimeUnit timeUnit, int requestLimit) {
+    /**
+     * Создает экземпляр CrptApi, который реализует ограничение на количество запросов к API.
+     *
+     * @param timeUnit     Единица измерения времени, используемая для определения интервала сброса разрешений.
+     * @param duration     Длительность интервала времени, после которого семафор будет сбрасывать разрешения.
+     *                     Значение указывается в соответствии с выбранной единицей измерения времени.
+     * @param requestLimit Максимальное количество разрешений (запросов), доступных для отправки за один интервал времени.
+     *                     <p>
+     *                     <p>
+     *                     Конструктор настраивает семафор с указанным количеством разрешений и планирует периодический сброс этих разрешений.
+     *                     Периодический сброс обеспечивается с помощью ScheduledExecutorService, который освобождает указанное количество
+     *                     разрешений семафора с заданной периодичностью. Это позволяет ограничить количество запросов к API, выполняемых
+     *                     за определенный интервал времени.
+     */
+    public CrptApi(TimeUnit timeUnit, long duration, int requestLimit) {
         this.semaphore = new Semaphore(requestLimit);
         this.scheduler = Executors.newScheduledThreadPool(1);
 
         scheduler.scheduleAtFixedRate(() -> semaphore.release(requestLimit - semaphore.availablePermits()),
-                0, 1, timeUnit);
+                0, duration, timeUnit);
     }
 
+    /**
+     * Отправляет документ к API, управляя ограничениями доступа через семафор.
+     * Этот метод приостанавливает выполнение, если количество одновременных запросов достигло своего предела.
+     *
+     * @param jsonDocument JSON представление документа для отправки.
+     * @param signature    Подпись документа.
+     * @throws InterruptedException если поток был прерван во время ожидания разрешения семафора.
+     */
     public void sendDocument(String jsonDocument, String signature) {
         try {
             semaphore.acquire();
             log.info("Acquired a permit, proceeding with the request");
-
-            try {
-                HttpClient client = HttpClient.newHttpClient();
-                HttpRequest request = buildHttpRequest(jsonDocument, signature);
-                log.info("Sending document to API");
-
-                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                handleResponse(response);
-            } finally {
-                semaphore.release();
-                log.info("Released a permit");
-            }
-        } catch (IOException e) {
-            log.severe("IOException occurred: " + e.getMessage());
+            executeHttpRequest(jsonDocument, signature);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while waiting to send a document", e);
+        }
+    }
+
+    /**
+     * Выполняет HTTP-запрос к API.
+     *
+     * @param jsonDocument JSON представление документа для отправки.
+     * @param signature    Подпись для аутентификации запроса.
+     * @throws InterruptedException если поток был прерван во время отправки запроса.
+     */
+    private void executeHttpRequest(String jsonDocument, String signature) throws InterruptedException {
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = buildHttpRequest(jsonDocument, signature);
+            log.info("Sending document to API");
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            handleResponse(response);
+        } catch (IOException e) {
+            log.severe("IOException occurred: " + e.getMessage());
         }
     }
 
@@ -65,7 +93,7 @@ public class CrptApi {
         return HttpRequest.newBuilder()
                 .uri(URI.create("https://ismp.crpt.ru/api/v3/lk/documents/create"))
                 .header("Content-Type", "application/json")
-                .header("X-Signature", signature)
+                .header("Signature", signature)
                 .POST(HttpRequest.BodyPublishers.ofString(jsonDocument))
                 .build();
     }
