@@ -31,7 +31,7 @@ public class CrptApi {
 Для использования `CrptApi` необходимо создать экземпляр класса с указанием временного интервала и лимита запросов. Например:
 
 ```java
-CrptApi api = new CrptApi(TimeUnit.SECONDS, 5); // 5 запросов в секунду
+CrptApi api = new CrptApi(TimeUnit.MINUTES, 1, 5); // будет проходить 5 запросов в минуту
 ```
 
 ## Отправка документа
