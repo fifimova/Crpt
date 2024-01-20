@@ -16,13 +16,13 @@ public class CrptApi {
     private final Semaphore requestSemaphore;
     private final ScheduledExecutorService scheduler;
 
-    public CrptApi(TimeUnit timeUnit, int requestLimit) {
-        this.requestSemaphore = new Semaphore(requestLimit);
-        // Настройка периодического сброса семафора
+    public CrptApi(TimeUnit timeUnit, long duration, int requestLimit) {
+        this.semaphore = new Semaphore(requestLimit);
         this.scheduler = Executors.newScheduledThreadPool(1);
+
         scheduler.scheduleAtFixedRate(() -> 
-            requestSemaphore.release(requestLimit - requestSemaphore.availablePermits()), 
-            0, 1, timeUnit);
+            semaphore.release(requestLimit - semaphore.availablePermits()),
+            0, duration, timeUnit);
     }
 ```
 
@@ -31,7 +31,7 @@ public class CrptApi {
 Для использования `CrptApi` необходимо создать экземпляр класса с указанием временного интервала и лимита запросов. Например:
 
 ```java
-CrptApi api = new CrptApi(TimeUnit.MINUTES, 1, 5); // будет проходить 5 запросов в минуту
+CrptApi api = new CrptApi(TimeUnit.MINUTES, 1, 5); // Ограничение 5 запросов в минуту
 ```
 
 ## Отправка документа
